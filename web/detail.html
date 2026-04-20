@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cube Detail 3D</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="detail-shell">
+      <section class="detail-topbar">
+        <a class="ghost nav-link" href="./index.html">Back to wall</a>
+        <div>
+          <p class="eyebrow">Single Cube Detail</p>
+          <h1 id="detailTitle">Cube detail</h1>
+        </div>
+        <span id="detailStatus" class="badge">ready</span>
+      </section>
+
+      <section class="detail-layout">
+        <div class="panel viewer-panel">
+          <div class="scene">
+            <div id="cube3d" class="cube-3d">
+              <div class="cube-face face-front"></div>
+              <div class="cube-face face-back"></div>
+              <div class="cube-face face-right"></div>
+              <div class="cube-face face-left"></div>
+              <div class="cube-face face-up"></div>
+              <div class="cube-face face-down"></div>
+            </div>
+          </div>
+
+          <div class="camera-controls">
+            <label class="field">
+              <span>Camera X</span>
+              <input id="cameraX" type="range" min="-70" max="70" value="-28" />
+            </label>
+            <label class="field">
+              <span>Camera Y</span>
+              <input id="cameraY" type="range" min="-180" max="180" value="-42" />
+            </label>
+          </div>
+        </div>
+
+        <div class="panel detail-sidebar">
+          <div id="detailInfo" class="selection-info"></div>
+
+          <div class="timeline-header">
+            <h2>Formula Timeline</h2>
+            <span id="stepLabel" class="badge">step 0</span>
+          </div>
+          <input id="stepSlider" type="range" min="0" max="0" value="0" />
+          <div class="timeline-actions">
+            <button id="prevStep" class="secondary">Prev</button>
+            <button id="nextStep" class="primary">Next</button>
+            <button id="resetManual" class="ghost">Reset manual turns</button>
+          </div>
+          <div id="formulaChips" class="chip-list"></div>
+
+          <div class="timeline-header">
+            <h2>Manual Twist</h2>
+            <span id="manualLabel" class="badge">0 extra turns</span>
+          </div>
+          <div id="manualButtons" class="move-pad"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./detail.js"></script>
+  </body>
+</html>

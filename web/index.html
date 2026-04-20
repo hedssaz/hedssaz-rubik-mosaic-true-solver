@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rubik Mosaic Planner</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Rubik Mosaic True-Solver</p>
+          <h1>Build the wall, then open a cube in 3D.</h1>
+          <p class="lede">
+            Click any cube after preview or solve to jump into the single-cube 3D detail view.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-card">
+            <span>palette</span>
+            <strong>6 colors</strong>
+          </div>
+          <div class="stat-card">
+            <span>cube size</span>
+            <strong>3 x 3</strong>
+          </div>
+          <div class="stat-card">
+            <span>solver</span>
+            <strong>Rust + WASM</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <label class="field upload">
+          <span>Image</span>
+          <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp" />
+        </label>
+        <label class="field">
+          <span>Cols</span>
+          <input id="colsInput" type="number" min="1" max="120" value="12" />
+        </label>
+        <label class="field">
+          <span>Rows</span>
+          <input id="rowsInput" type="number" min="1" max="120" value="8" />
+        </label>
+        <label class="field">
+          <span>Resize</span>
+          <select id="resizeMode">
+            <option value="smart-fill">smart fill</option>
+            <option value="stretch">stretch</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Max depth</span>
+          <input id="maxDepthInput" type="number" min="1" max="12" value="8" />
+        </label>
+        <div class="actions">
+          <button id="previewButton" class="secondary">Preview</button>
+          <button id="solveButton" class="primary">Solve</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="panel canvas-panel">
+          <div class="panel-header">
+            <h2>Mosaic Wall</h2>
+            <span id="statusText" class="status">Waiting for image</span>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="mosaicCanvas" width="960" height="640"></canvas>
+          </div>
+          <div class="progress-wrap">
+            <progress id="solveProgress" max="1" value="0"></progress>
+            <span id="progressLabel">0 / 0</span>
+          </div>
+          <p class="helper-line">Tip: click a cube on the wall or in the list to open the 3D detail page.</p>
+        </div>
+
+        <aside class="panel sidebar">
+          <div class="panel-header">
+            <h2>Selected Cube</h2>
+            <span id="selectionBadge" class="badge">none</span>
+          </div>
+          <div id="selectionInfo" class="selection-info">
+            Choose a cube to inspect its target colors and formula summary.
+          </div>
+          <div class="panel-header formulas-header">
+            <h2>Cube Results</h2>
+            <button id="downloadButton" class="ghost">Export JSON</button>
+          </div>
+          <div id="cubeList" class="cube-list"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

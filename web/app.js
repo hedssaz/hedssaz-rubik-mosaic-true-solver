@@ -1,6 +1,6 @@
-import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421h";
+import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421k";
 
-const ASSET_VERSION = "20260421h";
+const ASSET_VERSION = "20260421k";
 const MAIN_STATE_KEY = "cube1:main-state";
 
 const state = {

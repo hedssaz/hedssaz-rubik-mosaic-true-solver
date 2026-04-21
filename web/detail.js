@@ -6,7 +6,7 @@ import {
   faceMap,
   formulaStatusLabel,
   manualMoveList,
-} from "./cube-sim.js?v=20260421k";
+} from "./cube-sim.js?v=20260421w";
 
 const mainState = readJson("cube1:main-state", null);
 const persistedCube =
@@ -49,7 +49,7 @@ backToWall.addEventListener("click", () => {
     window.history.back();
     return;
   }
-  window.location.href = "./index.html?v=20260421k";
+  window.location.href = "./index.html?v=20260421w";
 });
 
 if (!cube) {

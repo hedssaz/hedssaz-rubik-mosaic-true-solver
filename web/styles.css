@@ -97,7 +97,7 @@ body {
 }
 
 .controls {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) auto;
   padding: 18px;
   margin-bottom: 18px;
 }
@@ -131,6 +131,11 @@ button {
 
 .upload input {
   padding: 10px 14px;
+}
+
+.field input[type="color"] {
+  padding: 6px;
+  min-height: 48px;
 }
 
 .actions {

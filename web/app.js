@@ -1,6 +1,6 @@
-import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421k";
+import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421w";
 
-const ASSET_VERSION = "20260421k";
+const ASSET_VERSION = "20260421w";
 const MAIN_STATE_KEY = "cube1:main-state";
 
 const state = {
@@ -12,6 +12,7 @@ const state = {
   rows: 8,
   selectedCubeId: null,
   lastEditedDimension: "cols",
+  backgroundColor: "#090909",
 };
 
 const canvas = document.getElementById("mosaicCanvas");
@@ -21,6 +22,7 @@ const colsInput = document.getElementById("colsInput");
 const rowsInput = document.getElementById("rowsInput");
 const resizeMode = document.getElementById("resizeMode");
 const maxDepthInput = document.getElementById("maxDepthInput");
+const backgroundColorInput = document.getElementById("backgroundColorInput");
 const previewButton = document.getElementById("previewButton");
 const solveButton = document.getElementById("solveButton");
 const downloadButton = document.getElementById("downloadButton");
@@ -110,6 +112,11 @@ resizeMode.addEventListener("change", () => {
 });
 
 maxDepthInput.addEventListener("input", persistMainState);
+backgroundColorInput.addEventListener("input", () => {
+  state.backgroundColor = normalizeHexColor(backgroundColorInput.value, "#090909");
+  renderMosaic(currentSource());
+  persistMainState();
+});
 
 previewButton.addEventListener("click", () => {
   generatePreview().catch(handleError);
@@ -266,12 +273,14 @@ function splitIntoCubes(imageData, cols, rows) {
 function nearestRubikColor(rgb) {
   let best = RUBIK_COLORS[0];
   let bestDistance = Number.POSITIVE_INFINITY;
+  const sampleLab = rgbToOklab(rgb);
 
   for (const color of RUBIK_COLORS) {
-    const dr = rgb[0] - color.rgb[0];
-    const dg = rgb[1] - color.rgb[1];
-    const db = rgb[2] - color.rgb[2];
-    const distance = dr * dr + dg * dg + db * db;
+    const paletteLab = rgbToOklab(color.rgb);
+    const dl = sampleLab[0] - paletteLab[0];
+    const da = sampleLab[1] - paletteLab[1];
+    const db = sampleLab[2] - paletteLab[2];
+    const distance = dl * dl + da * da + db * db;
     if (distance < bestDistance) {
       bestDistance = distance;
       best = color;
@@ -293,7 +302,7 @@ function renderMosaic(cubes) {
   canvas.height = state.rows * cubeHeight;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#090909";
+  ctx.fillStyle = state.backgroundColor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const cube of cubes) {
@@ -462,6 +471,7 @@ function persistMainState() {
     resizeMode: resizeMode.value,
     maxDepth: Number(maxDepthInput.value),
     lastEditedDimension: state.lastEditedDimension,
+    backgroundColor: state.backgroundColor,
   };
   localStorage.setItem(MAIN_STATE_KEY, JSON.stringify(payload));
 }
@@ -482,11 +492,13 @@ function restoreMainState() {
       : [];
     state.selectedCubeId = saved.selectedCubeId ?? null;
     state.lastEditedDimension = saved.lastEditedDimension ?? state.lastEditedDimension;
+    state.backgroundColor = normalizeHexColor(saved.backgroundColor, state.backgroundColor);
 
     colsInput.value = String(state.cols);
     rowsInput.value = String(state.rows);
     resizeMode.value = saved.resizeMode ?? resizeMode.value;
     maxDepthInput.value = String(saved.maxDepth ?? Number(maxDepthInput.value));
+    backgroundColorInput.value = state.backgroundColor;
 
     if (currentSource().length) {
       renderMosaic(currentSource());
@@ -520,4 +532,35 @@ function loadImage(file) {
 function handleError(error) {
   statusText.textContent = error instanceof Error ? error.message : String(error);
   solveButton.disabled = false;
+}
+
+function rgbToOklab(rgb) {
+  const [r, g, b] = rgb.map((channel) => srgbToLinear(channel / 255));
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+
+  return [
+    0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
+    1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
+    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
+  ];
+}
+
+function srgbToLinear(value) {
+  if (value <= 0.04045) {
+    return value / 12.92;
+  }
+  return ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function normalizeHexColor(value, fallback) {
+  if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)) {
+    return value;
+  }
+  return fallback;
 }

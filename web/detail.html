@@ -9,7 +9,7 @@
   <body>
     <main class="detail-shell">
       <section class="detail-topbar">
-        <a class="ghost nav-link" href="./index.html">Back to wall</a>
+        <button id="backToWall" class="ghost nav-link" type="button">Back to wall</button>
         <div>
           <p class="eyebrow">Single Cube Detail</p>
           <h1 id="detailTitle">Cube detail</h1>
@@ -20,14 +20,7 @@
       <section class="detail-layout">
         <div class="panel viewer-panel">
           <div class="scene">
-            <div id="cube3d" class="cube-3d">
-              <div class="cube-face face-front"></div>
-              <div class="cube-face face-back"></div>
-              <div class="cube-face face-right"></div>
-              <div class="cube-face face-left"></div>
-              <div class="cube-face face-up"></div>
-              <div class="cube-face face-down"></div>
-            </div>
+            <canvas id="cubeCanvas" class="cube-canvas" width="960" height="960"></canvas>
           </div>
 
           <div class="camera-controls">
@@ -66,6 +59,6 @@
       </section>
     </main>
 
-    <script type="module" src="./detail.js"></script>
+    <script type="module" src="./detail.js?v=20260421g"></script>
   </body>
 </html>

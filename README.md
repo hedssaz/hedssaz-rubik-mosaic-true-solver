@@ -49,13 +49,17 @@ web/
 ## Current Features
 
 - Image-to-mosaic conversion using standard Rubik colors
+- Perceptual palette matching using a Rubik 6-color quantizer
 - Per-cube target extraction
 - Center-aware cube orientation
 - Move simplification
 - Browser preview of the full mosaic wall
+- Configurable wall background color in the browser UI
 - Single-cube 3D detail page
 - Step-by-step formula playback
 - Manual face turns in the detail view
+- Mouse drag rotate and wheel zoom in the 3D detail view
+- Session-only browser state instead of long-term persistent local cache
 - Pure-color shortcut handling with no fake `UNSOLVED` output
 
 ## Current Solver Scope
@@ -101,6 +105,21 @@ Then open:
 ```text
 http://localhost:8080/web/
 ```
+
+The web UI currently includes:
+
+- wall preview generation from an uploaded image
+- browser-side solving through WebAssembly + Web Worker
+- per-cube selection and formula inspection
+- a single-cube 3D page with drag rotation and wheel zoom
+- session-scoped state restore while the tab remains open
+
+## Known Limitations
+
+- The output is restricted to the six standard Rubik colors, so photographic color fidelity is limited.
+- Portraits and low-saturation backgrounds can still quantize in visually surprising ways because there is no black, gray, or skin-tone color in the Rubik palette.
+- The solver is optimized for the displayed face of each cube, not for preserving a full-cube solved state.
+- The browser UI is intended for planning and inspection; very large walls may still be better handled through the Rust CLI or a backend workflow.
 
 ## Tests
 

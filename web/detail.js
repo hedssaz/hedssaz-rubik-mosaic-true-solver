@@ -6,7 +6,7 @@ import {
   faceMap,
   formulaStatusLabel,
   manualMoveList,
-} from "./cube-sim.js?v=20260421g";
+} from "./cube-sim.js?v=20260421k";
 
 const mainState = readJson("cube1:main-state", null);
 const persistedCube =
@@ -24,8 +24,6 @@ const detailStatus = document.getElementById("detailStatus");
 const detailInfo = document.getElementById("detailInfo");
 const cubeCanvas = document.getElementById("cubeCanvas");
 const cubeContext = cubeCanvas.getContext("2d");
-const cameraX = document.getElementById("cameraX");
-const cameraY = document.getElementById("cameraY");
 const stepSlider = document.getElementById("stepSlider");
 const stepLabel = document.getElementById("stepLabel");
 const prevStep = document.getElementById("prevStep");
@@ -35,13 +33,23 @@ const formulaChips = document.getElementById("formulaChips");
 const manualButtons = document.getElementById("manualButtons");
 const manualLabel = document.getElementById("manualLabel");
 const backToWall = document.getElementById("backToWall");
+const dragHint = document.getElementById("dragHint");
+
+const viewState = {
+  pitch: -26,
+  yaw: -38,
+  dragging: false,
+  pointerId: null,
+  lastX: 0,
+  lastY: 0,
+};
 
 backToWall.addEventListener("click", () => {
   if (window.history.length > 1) {
     window.history.back();
     return;
   }
-  window.location.href = "./index.html?v=20260421g";
+  window.location.href = "./index.html?v=20260421k";
 });
 
 if (!cube) {
@@ -68,11 +76,8 @@ function startDetail() {
   renderInfo();
   renderFormulaChips();
   renderManualButtons();
-  renderCamera();
+  bindDragControls();
   renderState();
-
-  cameraX.addEventListener("input", renderCamera);
-  cameraY.addEventListener("input", renderCamera);
 
   stepSlider.addEventListener("input", () => {
     currentStep = Number(stepSlider.value);
@@ -150,21 +155,58 @@ function startDetail() {
     });
   }
 
-  function renderCamera() {
-    renderState();
-  }
-
   function renderState() {
     const baseState = states[currentStep];
     const displayState = applyMoves(baseState, manualMoves);
     const faces = faceMap(displayState);
-    renderCubeCanvas(faces, Number(cameraX.value), Number(cameraY.value));
+    renderCubeCanvas(faces, viewState.pitch, viewState.yaw);
 
     stepLabel.textContent = `step ${currentStep}/${states.length - 1}`;
     manualLabel.textContent = `${manualMoves.length} extra turns`;
     formulaChips.querySelectorAll(".chip").forEach((chip, index) => {
       chip.classList.toggle("active", index === currentStep);
     });
+  }
+
+  function bindDragControls() {
+    const finishDrag = () => {
+      viewState.dragging = false;
+      viewState.pointerId = null;
+      cubeCanvas.classList.remove("dragging");
+      if (dragHint) {
+        dragHint.textContent = "Drag on the cube to rotate the view.";
+      }
+    };
+
+    cubeCanvas.addEventListener("pointerdown", (event) => {
+      viewState.dragging = true;
+      viewState.pointerId = event.pointerId;
+      viewState.lastX = event.clientX;
+      viewState.lastY = event.clientY;
+      cubeCanvas.setPointerCapture(event.pointerId);
+      cubeCanvas.classList.add("dragging");
+      if (dragHint) {
+        dragHint.textContent = "Release to keep this angle.";
+      }
+    });
+
+    cubeCanvas.addEventListener("pointermove", (event) => {
+      if (!viewState.dragging || event.pointerId !== viewState.pointerId) {
+        return;
+      }
+
+      const dx = event.clientX - viewState.lastX;
+      const dy = event.clientY - viewState.lastY;
+      viewState.lastX = event.clientX;
+      viewState.lastY = event.clientY;
+      viewState.yaw = clamp(viewState.yaw + dx * 0.45, -120, 120);
+      viewState.pitch = clamp(viewState.pitch + dy * 0.35, -68, 68);
+      renderState();
+    });
+
+    cubeCanvas.addEventListener("pointerup", finishDrag);
+    cubeCanvas.addEventListener("pointercancel", finishDrag);
+    cubeCanvas.addEventListener("lostpointercapture", finishDrag);
   }
 }
 
@@ -176,76 +218,103 @@ function renderCubeCanvas(faces, pitch, yaw) {
   cubeContext.fillStyle = "#141313";
   cubeContext.fillRect(0, 0, width, height);
 
-  const faceSize = width * 0.26;
-  const slant = faceSize * 0.52;
-  const lift = faceSize * 0.3;
-  const centerX = width * 0.5;
-  const centerY = height * 0.6;
+  const geometry = createProjectedCube(width, height, pitch, yaw);
+  const displayFaces = {
+    F: orientFace(faces.U),
+    B: orientFace(faces.D, { reverseRows: true, reverseCols: true }),
+    U: orientFace(faces.B, { reverseRows: true, reverseCols: true }),
+    D: orientFace(faces.F),
+    R: orientFace(faces.R, { reverseCols: true }),
+    L: orientFace(faces.L, { reverseCols: true }),
+  };
 
-  const showRight = yaw <= 0;
-  const showTop = pitch <= 0;
+  drawGroundShadow(geometry);
+  drawWallPlane(geometry.baseFront);
 
-  const front = [
-    point(centerX - faceSize / 2, centerY - faceSize / 2),
-    point(centerX + faceSize / 2, centerY - faceSize / 2),
-    point(centerX + faceSize / 2, centerY + faceSize / 2),
-    point(centerX - faceSize / 2, centerY + faceSize / 2),
-  ];
+  const drawQueue = [
+    makeStickerFace("B", geometry, displayFaces.B, 0.78),
+    makeStickerFace("U", geometry, displayFaces.U, 0.9),
+    makeStickerFace("D", geometry, displayFaces.D, 0.88),
+    makeStickerFace("R", geometry, displayFaces.R, 0.82),
+    makeStickerFace("L", geometry, displayFaces.L, 0.82),
+    makeStickerFace("F", geometry, displayFaces.F, 1, true),
+  ]
+    .filter((face) => face.visible)
+    .sort((a, b) => a.depth - b.depth);
 
-  const side = showRight
-    ? [
-        front[1],
-        point(front[1].x + slant, front[1].y - lift),
-        point(front[2].x + slant, front[2].y - lift),
-        front[2],
-      ]
-    : [
-        point(front[0].x - slant, front[0].y - lift),
-        front[0],
-        front[3],
-        point(front[3].x - slant, front[3].y - lift),
-      ];
-
-  const top = showTop
-    ? [
-        point(front[0].x, front[0].y),
-        point(front[1].x, front[1].y),
-        point(front[1].x + slant, front[1].y - lift),
-        point(front[0].x - slant, front[0].y - lift),
-      ]
-    : [
-        point(front[3].x - slant, front[3].y - lift),
-        point(front[2].x + slant, front[2].y - lift),
-        point(front[2].x, front[2].y),
-        point(front[3].x, front[3].y),
-      ];
-
-  const sideFace = showRight ? "R" : "L";
-  const verticalFace = showTop ? "U" : "D";
-
-  drawFaceBackground(side);
-  drawFaceStickers(side, faces[sideFace]);
-  drawFaceBackground(top);
-  drawFaceStickers(top, faces[verticalFace]);
-  drawFaceBackground(front);
-  drawFaceStickers(front, faces.F);
+  for (const face of drawQueue) {
+    if (face.key === "F") {
+      drawFrontHalo(face.points);
+    }
+    drawFaceBackground(face.points, face.key === "F");
+    drawFaceStickers(face.points, face.colors, face.alpha);
+  }
 }
 
-function drawFaceBackground(points) {
+function drawWallPlane(points) {
+  cubeContext.save();
+  drawQuad(points, "rgba(255,255,255,0.045)", "rgba(255,255,255,0.1)", 3);
+  for (let step = 1; step < 3; step += 1) {
+    const t = step / 3;
+    const horizontalStart = lerpPoint(points[0], points[3], t);
+    const horizontalEnd = lerpPoint(points[1], points[2], t);
+    const verticalStart = lerpPoint(points[0], points[1], t);
+    const verticalEnd = lerpPoint(points[3], points[2], t);
+    cubeContext.strokeStyle = "rgba(255,255,255,0.03)";
+    cubeContext.lineWidth = 1;
+    cubeContext.beginPath();
+    cubeContext.moveTo(horizontalStart.x, horizontalStart.y);
+    cubeContext.lineTo(horizontalEnd.x, horizontalEnd.y);
+    cubeContext.stroke();
+    cubeContext.beginPath();
+    cubeContext.moveTo(verticalStart.x, verticalStart.y);
+    cubeContext.lineTo(verticalEnd.x, verticalEnd.y);
+    cubeContext.stroke();
+  }
+  cubeContext.restore();
+}
+
+function drawGroundShadow(geometry) {
+  const front = geometry.baseFront;
+  const skew = geometry.rotatedNormals.R.z >= 0 ? 40 : -40;
+  const drop = 34;
+  cubeContext.save();
   cubeContext.beginPath();
-  cubeContext.moveTo(points[0].x, points[0].y);
-  for (let index = 1; index < points.length; index += 1) {
-    cubeContext.lineTo(points[index].x, points[index].y);
+  cubeContext.moveTo(front[0].x + skew, front[0].y + drop * 0.18);
+  cubeContext.lineTo(front[1].x + skew, front[1].y + drop * 0.18);
+  cubeContext.lineTo(front[2].x + skew, front[2].y + drop);
+  cubeContext.lineTo(front[3].x + skew, front[3].y + drop);
+  cubeContext.closePath();
+  cubeContext.fillStyle = "rgba(0,0,0,0.2)";
+  cubeContext.fill();
+  cubeContext.restore();
+}
+
+function drawFrontHalo(points) {
+  const halo = expandQuad(points, 1.14);
+  cubeContext.save();
+  cubeContext.beginPath();
+  cubeContext.moveTo(halo[0].x, halo[0].y);
+  for (let index = 1; index < halo.length; index += 1) {
+    cubeContext.lineTo(halo[index].x, halo[index].y);
   }
   cubeContext.closePath();
-  cubeContext.fillStyle = "#070707";
-  cubeContext.fill();
-  cubeContext.lineWidth = 6;
-  cubeContext.strokeStyle = "rgba(255,255,255,0.08)";
+  cubeContext.lineWidth = 18;
+  cubeContext.strokeStyle = "rgba(255, 154, 92, 0.22)";
   cubeContext.stroke();
+  cubeContext.restore();
 }
 
-function drawFaceStickers(points, colors) {
+function drawFaceBackground(points, emphasize = false, fillOverride = null) {
+  drawQuad(
+    points,
+    fillOverride ?? (emphasize ? "#0d0d0d" : "#070707"),
+    emphasize ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)",
+    emphasize ? 8 : 6,
+  );
+}
+
+function drawFaceStickers(points, colors, alpha = 1) {
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
   const inset = 0.08;
 
@@ -268,8 +337,10 @@ function drawFaceStickers(points, colors) {
       cubeContext.lineTo(quad[2].x, quad[2].y);
       cubeContext.lineTo(quad[3].x, quad[3].y);
       cubeContext.closePath();
+      cubeContext.globalAlpha = alpha;
       cubeContext.fillStyle = RUBIK_COLORS[colorId].hex;
       cubeContext.fill();
+      cubeContext.globalAlpha = 1;
       cubeContext.lineWidth = 2;
       cubeContext.strokeStyle = "rgba(0,0,0,0.24)";
       cubeContext.stroke();
@@ -292,6 +363,173 @@ function lerpPoint(a, b, t) {
 
 function point(x, y) {
   return { x, y };
+}
+
+function point3(x, y, z) {
+  return { x, y, z };
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function drawQuad(points, fillStyle, strokeStyle, lineWidth) {
+  cubeContext.beginPath();
+  cubeContext.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length; index += 1) {
+    cubeContext.lineTo(points[index].x, points[index].y);
+  }
+  cubeContext.closePath();
+  cubeContext.fillStyle = fillStyle;
+  cubeContext.fill();
+  cubeContext.lineWidth = lineWidth;
+  cubeContext.strokeStyle = strokeStyle;
+  cubeContext.stroke();
+}
+
+function createProjectedCube(width, height, pitch, yaw) {
+  const pitchRad = (pitch * Math.PI) / 180;
+  const yawRad = (yaw * Math.PI) / 180;
+  const centerX = width * 0.5;
+  const centerY = height * 0.58;
+  const scale = width * 0.34;
+  const cameraDistance = 6.2;
+  const halfSize = 1.04;
+  const halfDepth = 0.82;
+  const rawVertices = {
+    ftl: point3(-halfSize, halfSize, halfDepth),
+    ftr: point3(halfSize, halfSize, halfDepth),
+    fbr: point3(halfSize, -halfSize, halfDepth),
+    fbl: point3(-halfSize, -halfSize, halfDepth),
+    btl: point3(-halfSize, halfSize, -halfDepth),
+    btr: point3(halfSize, halfSize, -halfDepth),
+    bbr: point3(halfSize, -halfSize, -halfDepth),
+    bbl: point3(-halfSize, -halfSize, -halfDepth),
+  };
+
+  const rotated = Object.fromEntries(
+    Object.entries(rawVertices).map(([key, vertex]) => [key, rotatePoint(vertex, pitchRad, yawRad)]),
+  );
+  const projected = Object.fromEntries(
+    Object.entries(rotated).map(([key, vertex]) => [
+      key,
+      projectPoint(vertex, centerX, centerY, scale, cameraDistance),
+    ]),
+  );
+
+  const rotatedNormals = {
+    F: rotateVector(point3(0, 0, 1), pitchRad, yawRad),
+    B: rotateVector(point3(0, 0, -1), pitchRad, yawRad),
+    U: rotateVector(point3(0, 1, 0), pitchRad, yawRad),
+    D: rotateVector(point3(0, -1, 0), pitchRad, yawRad),
+    R: rotateVector(point3(1, 0, 0), pitchRad, yawRad),
+    L: rotateVector(point3(-1, 0, 0), pitchRad, yawRad),
+  };
+
+  return {
+    rotated,
+    rotatedNormals,
+    baseFront: [projected.ftl, projected.ftr, projected.fbr, projected.fbl],
+    facePoints: {
+      B: [projected.btr, projected.btl, projected.bbl, projected.bbr],
+      U: [projected.btl, projected.btr, projected.ftr, projected.ftl],
+      D: [projected.fbl, projected.fbr, projected.bbr, projected.bbl],
+      R: [projected.ftr, projected.btr, projected.bbr, projected.fbr],
+      L: [projected.btl, projected.ftl, projected.fbl, projected.bbl],
+      F: [projected.ftl, projected.ftr, projected.fbr, projected.fbl],
+    },
+  };
+}
+
+function rotatePoint(vertex, pitchRad, yawRad) {
+  const cosYaw = Math.cos(yawRad);
+  const sinYaw = Math.sin(yawRad);
+  const cosPitch = Math.cos(pitchRad);
+  const sinPitch = Math.sin(pitchRad);
+
+  const yawed = point3(
+    vertex.x * cosYaw + vertex.z * sinYaw,
+    vertex.y,
+    -vertex.x * sinYaw + vertex.z * cosYaw,
+  );
+
+  return point3(
+    yawed.x,
+    yawed.y * cosPitch - yawed.z * sinPitch,
+    yawed.y * sinPitch + yawed.z * cosPitch,
+  );
+}
+
+function rotateVector(vector, pitchRad, yawRad) {
+  return rotatePoint(vector, pitchRad, yawRad);
+}
+
+function projectPoint(vertex, centerX, centerY, scale, cameraDistance) {
+  const depth = cameraDistance - vertex.z;
+  const perspective = scale / depth;
+  return point(
+    centerX + vertex.x * perspective,
+    centerY - vertex.y * perspective,
+  );
+}
+
+function makeStickerFace(key, geometry, colors, alpha, emphasize = false) {
+  return {
+    key,
+    points: geometry.facePoints[key],
+    colors,
+    alpha,
+    visible: geometry.rotatedNormals[key].z > 0.02,
+    depth: averageDepth(geometry, faceVertexKeys(key)),
+    emphasize,
+  };
+}
+
+function faceVertexKeys(key) {
+  switch (key) {
+    case "B":
+      return ["btr", "btl", "bbl", "bbr"];
+    case "U":
+      return ["btl", "btr", "ftr", "ftl"];
+    case "D":
+      return ["fbl", "fbr", "bbr", "bbl"];
+    case "R":
+      return ["ftr", "btr", "bbr", "fbr"];
+    case "L":
+      return ["btl", "ftl", "fbl", "bbl"];
+    default:
+      return ["ftl", "ftr", "fbr", "fbl"];
+  }
+}
+
+function averageDepth(geometry, keys) {
+  return (
+    keys.reduce((sum, key) => sum + geometry.rotated[key].z, 0) / keys.length
+  );
+}
+
+function expandQuad(points, scale) {
+  const center = points.reduce(
+    (sum, point) => ({ x: sum.x + point.x / 4, y: sum.y + point.y / 4 }),
+    { x: 0, y: 0 },
+  );
+  return points.map((point) => ({
+    x: center.x + (point.x - center.x) * scale,
+    y: center.y + (point.y - center.y) * scale,
+  }));
+}
+
+function orientFace(colors, options = {}) {
+  const { reverseRows = false, reverseCols = false } = options;
+  const rows = [
+    colors.slice(0, 3),
+    colors.slice(3, 6),
+    colors.slice(6, 9),
+  ];
+  const orderedRows = reverseRows ? [...rows].reverse() : rows;
+  return orderedRows
+    .map((row) => (reverseCols ? [...row].reverse() : row))
+    .flat();
 }
 
 function readJson(key, fallback, storage = localStorage) {

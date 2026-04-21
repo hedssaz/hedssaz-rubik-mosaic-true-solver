@@ -1,6 +1,6 @@
-const ASSET_VERSION = "20260421g";
+const ASSET_VERSION = "20260421k";
 
-import init, { solve_cube_js } from "./pkg/cube1.js?v=20260421g";
+import init, { solve_cube_js } from "./pkg/cube1.js?v=20260421k";
 
 let ready = null;
 

@@ -6,7 +6,7 @@ import {
   faceMap,
   formulaStatusLabel,
   manualMoveList,
-} from "./cube-sim.js?v=20260421g";
+} from "./cube-sim.js?v=20260421h";
 
 const mainState = readJson("cube1:main-state", null);
 const persistedCube =
@@ -176,14 +176,15 @@ function renderCubeCanvas(faces, pitch, yaw) {
   cubeContext.fillStyle = "#141313";
   cubeContext.fillRect(0, 0, width, height);
 
-  const faceSize = width * 0.26;
-  const slant = faceSize * 0.52;
-  const lift = faceSize * 0.3;
+  const faceSize = width * 0.28;
+  const yawRatio = Math.min(Math.abs(yaw) / 180, 1);
+  const tiltRatio = Math.min(Math.abs(pitch) / 70, 1);
+  const slant = faceSize * (0.38 + yawRatio * 0.18);
+  const lift = faceSize * (0.18 + tiltRatio * 0.18);
   const centerX = width * 0.5;
-  const centerY = height * 0.6;
+  const centerY = height * 0.62;
 
   const showRight = yaw <= 0;
-  const showTop = pitch <= 0;
 
   const front = [
     point(centerX - faceSize / 2, centerY - faceSize / 2),
@@ -206,29 +207,25 @@ function renderCubeCanvas(faces, pitch, yaw) {
         point(front[3].x - slant, front[3].y - lift),
       ];
 
-  const top = showTop
-    ? [
-        point(front[0].x, front[0].y),
-        point(front[1].x, front[1].y),
-        point(front[1].x + slant, front[1].y - lift),
-        point(front[0].x - slant, front[0].y - lift),
-      ]
-    : [
-        point(front[3].x - slant, front[3].y - lift),
-        point(front[2].x + slant, front[2].y - lift),
-        point(front[2].x, front[2].y),
-        point(front[3].x, front[3].y),
-      ];
+  const top = [
+    point(front[0].x, front[0].y),
+    point(front[1].x, front[1].y),
+    point(front[1].x + slant, front[1].y - lift),
+    point(front[0].x - slant, front[0].y - lift),
+  ];
 
-  const sideFace = showRight ? "R" : "L";
-  const verticalFace = showTop ? "U" : "D";
+  const frontFace = orientFace(faces.U);
+  const sideFace = showRight
+    ? orientFace(faces.R, { reverseCols: true })
+    : orientFace(faces.L, { reverseCols: true });
+  const topFace = orientFace(faces.B, { reverseRows: true, reverseCols: true });
 
   drawFaceBackground(side);
-  drawFaceStickers(side, faces[sideFace]);
+  drawFaceStickers(side, sideFace, 0.82);
   drawFaceBackground(top);
-  drawFaceStickers(top, faces[verticalFace]);
+  drawFaceStickers(top, topFace, 0.9);
   drawFaceBackground(front);
-  drawFaceStickers(front, faces.F);
+  drawFaceStickers(front, frontFace, 1);
 }
 
 function drawFaceBackground(points) {
@@ -245,7 +242,7 @@ function drawFaceBackground(points) {
   cubeContext.stroke();
 }
 
-function drawFaceStickers(points, colors) {
+function drawFaceStickers(points, colors, alpha = 1) {
   const [topLeft, topRight, bottomRight, bottomLeft] = points;
   const inset = 0.08;
 
@@ -268,8 +265,10 @@ function drawFaceStickers(points, colors) {
       cubeContext.lineTo(quad[2].x, quad[2].y);
       cubeContext.lineTo(quad[3].x, quad[3].y);
       cubeContext.closePath();
+      cubeContext.globalAlpha = alpha;
       cubeContext.fillStyle = RUBIK_COLORS[colorId].hex;
       cubeContext.fill();
+      cubeContext.globalAlpha = 1;
       cubeContext.lineWidth = 2;
       cubeContext.strokeStyle = "rgba(0,0,0,0.24)";
       cubeContext.stroke();
@@ -292,6 +291,19 @@ function lerpPoint(a, b, t) {
 
 function point(x, y) {
   return { x, y };
+}
+
+function orientFace(colors, options = {}) {
+  const { reverseRows = false, reverseCols = false } = options;
+  const rows = [
+    colors.slice(0, 3),
+    colors.slice(3, 6),
+    colors.slice(6, 9),
+  ];
+  const orderedRows = reverseRows ? [...rows].reverse() : rows;
+  return orderedRows
+    .map((row) => (reverseCols ? [...row].reverse() : row))
+    .flat();
 }
 
 function readJson(key, fallback, storage = localStorage) {

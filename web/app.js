@@ -1,4 +1,7 @@
-import { RUBIK_COLORS, describeFormula } from "./cube-sim.js";
+import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421g";
+
+const ASSET_VERSION = "20260421g";
+const MAIN_STATE_KEY = "cube1:main-state";
 
 const state = {
   file: null,
@@ -8,6 +11,7 @@ const state = {
   cols: 12,
   rows: 8,
   selectedCubeId: null,
+  lastEditedDimension: "cols",
 };
 
 const canvas = document.getElementById("mosaicCanvas");
@@ -27,20 +31,31 @@ const selectionBadge = document.getElementById("selectionBadge");
 const selectionInfo = document.getElementById("selectionInfo");
 const cubeList = document.getElementById("cubeList");
 
-const worker = new Worker(new URL("./solver.worker.js", import.meta.url), {
+const worker = new Worker(new URL(`./solver.worker.js?v=${ASSET_VERSION}`, import.meta.url), {
   type: "module",
 });
+
+restoreMainState();
 
 worker.addEventListener("message", (event) => {
   const { type, payload } = event.data;
   if (type === "ready") {
-    statusText.textContent = "Solver ready";
+    statusText.textContent = currentSource().length ? "Solver ready, state restored" : "Solver ready";
+    return;
+  }
+
+  if (type === "progress") {
+    solveProgress.max = Math.max(payload.total ?? 0, 1);
+    solveProgress.value = payload.completed ?? 0;
+    progressLabel.textContent = `${payload.completed} / ${payload.total}`;
+    statusText.textContent = `Solving cube ${payload.completed} of ${payload.total}`;
     return;
   }
 
   if (type === "error") {
     statusText.textContent = `Solve failed: ${payload}`;
     solveButton.disabled = false;
+    persistMainState();
     return;
   }
 
@@ -48,11 +63,13 @@ worker.addEventListener("message", (event) => {
     state.solvedCubes = payload.map(normalizeCube);
     solveButton.disabled = false;
     statusText.textContent = "Solve complete";
-    solveProgress.value = 1;
+    solveProgress.max = Math.max(payload.length, 1);
+    solveProgress.value = payload.length;
     progressLabel.textContent = `${payload.length} / ${payload.length}`;
     renderMosaic(state.solvedCubes);
     renderCubeList(state.solvedCubes);
     updateSelection();
+    persistMainState();
   }
 });
 
@@ -64,9 +81,35 @@ imageInput.addEventListener("change", async (event) => {
 
   state.file = file;
   state.sourceImage = await loadImage(file);
+  syncDimensionsFromAspect(state.lastEditedDimension);
   statusText.textContent = `Loaded ${file.name}`;
   await generatePreview();
 });
+
+colsInput.addEventListener("input", () => {
+  state.lastEditedDimension = "cols";
+  if (shouldLockAspect()) {
+    syncDimensionsFromAspect("cols");
+  }
+  persistMainState();
+});
+
+rowsInput.addEventListener("input", () => {
+  state.lastEditedDimension = "rows";
+  if (shouldLockAspect()) {
+    syncDimensionsFromAspect("rows");
+  }
+  persistMainState();
+});
+
+resizeMode.addEventListener("change", () => {
+  if (shouldLockAspect()) {
+    syncDimensionsFromAspect(state.lastEditedDimension);
+  }
+  persistMainState();
+});
+
+maxDepthInput.addEventListener("input", persistMainState);
 
 previewButton.addEventListener("click", () => {
   generatePreview().catch(handleError);
@@ -83,7 +126,8 @@ solveButton.addEventListener("click", async () => {
 
     statusText.textContent = "Solving in WASM";
     solveButton.disabled = true;
-    solveProgress.value = 0.15;
+    solveProgress.max = Math.max(state.cubes.length, 1);
+    solveProgress.value = 0;
     progressLabel.textContent = `0 / ${state.cubes.length}`;
 
     worker.postMessage({
@@ -116,20 +160,18 @@ downloadButton.addEventListener("click", () => {
 });
 
 canvas.addEventListener("click", (event) => {
-  const cubes = currentSource();
-  if (!cubes.length) {
+  const cube = findCubeFromCanvasEvent(event);
+  if (!cube) {
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
-  const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
-  const cubeWidth = canvas.width / state.cols;
-  const cubeHeight = canvas.height / state.rows;
-  const cubeX = Math.floor(x / cubeWidth);
-  const cubeY = Math.floor(y / cubeHeight);
-  const cube = cubes.find((item) => item.x === cubeX && item.y === cubeY);
+  state.selectedCubeId = cube.id;
+  updateSelection();
+  persistMainState();
+});
 
+canvas.addEventListener("dblclick", (event) => {
+  const cube = findCubeFromCanvasEvent(event);
   if (cube) {
     openCubeDetail(cube);
   }
@@ -155,10 +197,12 @@ async function generatePreview() {
 
   statusText.textContent = `Preview ready for ${state.cols} x ${state.rows}`;
   solveProgress.value = 0;
+  solveProgress.max = Math.max(state.cubes.length, 1);
   progressLabel.textContent = `0 / ${state.cubes.length}`;
   renderMosaic(state.cubes);
   renderCubeList(state.cubes);
   updateSelection();
+  persistMainState();
 }
 
 function rasterizeToGrid(image, width, height, mode) {
@@ -257,6 +301,41 @@ function renderMosaic(cubes) {
   }
 }
 
+function shouldLockAspect() {
+  return resizeMode.value === "smart-fill" && Boolean(state.sourceImage);
+}
+
+function syncDimensionsFromAspect(changedDimension) {
+  if (!shouldLockAspect()) {
+    return;
+  }
+
+  const aspectRatio = state.sourceImage.width / state.sourceImage.height;
+  const min = 1;
+  const max = 120;
+
+  if (changedDimension === "cols") {
+    const cols = clampDimension(colsInput.value);
+    const rows = clampDimension(Math.round(cols / aspectRatio), min, max);
+    colsInput.value = String(cols);
+    rowsInput.value = String(rows);
+    return;
+  }
+
+  const rows = clampDimension(rowsInput.value);
+  const cols = clampDimension(Math.round(rows * aspectRatio), min, max);
+  rowsInput.value = String(rows);
+  colsInput.value = String(cols);
+}
+
+function clampDimension(value, min = 1, max = 120) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return min;
+  }
+  return Math.max(min, Math.min(max, Math.round(numeric)));
+}
+
 function drawCube(cube, cubeWidth, cubeHeight) {
   const offsetX = cube.x * cubeWidth;
   const offsetY = cube.y * cubeHeight;
@@ -296,11 +375,12 @@ function renderCubeList(cubes) {
           .join("")}
       </div>
     `;
-    card.addEventListener("mouseenter", () => {
+    card.addEventListener("click", () => {
       state.selectedCubeId = cube.id;
       updateSelection();
+      persistMainState();
     });
-    card.addEventListener("click", () => {
+    card.addEventListener("dblclick", () => {
       openCubeDetail(cube);
     });
     cubeList.appendChild(card);
@@ -320,7 +400,7 @@ function updateSelection() {
 
   selectionBadge.textContent = `#${cube.id}`;
   const center = RUBIK_COLORS[cube.target[4]];
-  const orientation = cube.orientation?.note ?? "Open the 3D view to inspect this cube.";
+  const orientation = cube.orientation?.note ?? "Double-click to inspect this cube in 3D.";
   selectionInfo.innerHTML = `
     <strong>coords</strong>: (${cube.x}, ${cube.y})<br />
     <strong>center</strong>: ${center.name}<br />
@@ -331,13 +411,13 @@ function updateSelection() {
 }
 
 function openCubeDetail(cube) {
-  const source = currentSource();
-  sessionStorage.setItem("cube1:selected-cube", JSON.stringify(cube));
-  sessionStorage.setItem(
+  persistMainState();
+  localStorage.setItem("cube1:selected-cube", JSON.stringify(cube));
+  localStorage.setItem(
     "cube1:meta",
-    JSON.stringify({ cols: state.cols, rows: state.rows, total: source.length }),
+    JSON.stringify({ cols: state.cols, rows: state.rows, total: currentSource().length }),
   );
-  window.location.href = "./detail.html";
+  window.location.href = `./detail.html?v=${ASSET_VERSION}`;
 }
 
 function currentSource() {
@@ -354,6 +434,74 @@ function normalizeCube(cube) {
 
 function isUniformTarget(target) {
   return target.every((item) => item === target[0]);
+}
+
+function findCubeFromCanvasEvent(event) {
+  const cubes = currentSource();
+  if (!cubes.length) {
+    return null;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+  const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+  const cubeWidth = canvas.width / state.cols;
+  const cubeHeight = canvas.height / state.rows;
+  const cubeX = Math.floor(x / cubeWidth);
+  const cubeY = Math.floor(y / cubeHeight);
+  return cubes.find((item) => item.x === cubeX && item.y === cubeY) ?? null;
+}
+
+function persistMainState() {
+  const payload = {
+    cols: state.cols,
+    rows: state.rows,
+    cubes: state.cubes,
+    solvedCubes: state.solvedCubes,
+    selectedCubeId: state.selectedCubeId,
+    resizeMode: resizeMode.value,
+    maxDepth: Number(maxDepthInput.value),
+    lastEditedDimension: state.lastEditedDimension,
+  };
+  localStorage.setItem(MAIN_STATE_KEY, JSON.stringify(payload));
+}
+
+function restoreMainState() {
+  const raw = localStorage.getItem(MAIN_STATE_KEY);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const saved = JSON.parse(raw);
+    state.cols = saved.cols ?? state.cols;
+    state.rows = saved.rows ?? state.rows;
+    state.cubes = Array.isArray(saved.cubes) ? saved.cubes.map(normalizeCube) : [];
+    state.solvedCubes = Array.isArray(saved.solvedCubes)
+      ? saved.solvedCubes.map(normalizeCube)
+      : [];
+    state.selectedCubeId = saved.selectedCubeId ?? null;
+    state.lastEditedDimension = saved.lastEditedDimension ?? state.lastEditedDimension;
+
+    colsInput.value = String(state.cols);
+    rowsInput.value = String(state.rows);
+    resizeMode.value = saved.resizeMode ?? resizeMode.value;
+    maxDepthInput.value = String(saved.maxDepth ?? Number(maxDepthInput.value));
+
+    if (currentSource().length) {
+      renderMosaic(currentSource());
+      renderCubeList(currentSource());
+      solveProgress.max = Math.max(currentSource().length, 1);
+      solveProgress.value = state.solvedCubes.length ? currentSource().length : 0;
+      progressLabel.textContent = `${currentSource().length} / ${currentSource().length}`;
+      statusText.textContent = state.solvedCubes.length
+        ? "Restored solved wall"
+        : "Restored preview wall";
+      updateSelection();
+    }
+  } catch (error) {
+    console.warn("Failed to restore saved wall state", error);
+  }
 }
 
 function loadImage(file) {

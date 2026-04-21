@@ -1,10 +1,12 @@
-import init, { solve_cubes_js } from "./pkg/cube1.js";
+const ASSET_VERSION = "20260421g";
+
+import init, { solve_cube_js } from "./pkg/cube1.js?v=20260421g";
 
 let ready = null;
 
 async function ensureReady() {
   if (!ready) {
-    ready = init();
+    ready = init(new URL(`./pkg/cube1_bg.wasm?v=${ASSET_VERSION}`, import.meta.url));
   }
   await ready;
 }
@@ -17,8 +19,29 @@ self.addEventListener("message", async (event) => {
 
   try {
     await ensureReady();
-    const result = solve_cubes_js(payload);
-    self.postMessage({ type: "result", payload: result });
+
+    const total = payload.cubes.length;
+    const results = [];
+
+    for (let index = 0; index < total; index += 1) {
+      const cube = payload.cubes[index];
+      const solved = solve_cube_js({
+        cube,
+        max_depth: payload.max_depth,
+      });
+      results.push(solved);
+
+      self.postMessage({
+        type: "progress",
+        payload: {
+          completed: index + 1,
+          total,
+          cube_id: cube.id,
+        },
+      });
+    }
+
+    self.postMessage({ type: "result", payload: results });
   } catch (error) {
     self.postMessage({
       type: "error",

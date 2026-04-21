@@ -14,7 +14,7 @@ pub struct SolverConfig {
 
 impl Default for SolverConfig {
     fn default() -> Self {
-        Self { max_depth: 8 }
+        Self { max_depth: 12 }
     }
 }
 
@@ -96,32 +96,55 @@ pub fn solve_cubes(mut cubes: Vec<MosaicCube>, config: SolverConfig) -> Vec<Mosa
     let iter = cubes.iter_mut();
 
     iter.for_each(|cube| {
-        let target = cube.target_colors();
-        let orientation = OrientationHint {
-            up: target[4],
-            note: format!("Start with {} face up.", target[4].hex()),
-        };
-        cube.orientation = orientation;
-
-        if target.iter().all(|color| *color == target[0]) {
-            cube.formula = Vec::new();
-            cube.completed = true;
-            return;
-        }
-
-        match solve_top_face(target, config) {
-            Ok(moves) => {
-                cube.formula = moves.iter().map(|mv| mv.notation().to_owned()).collect();
-                cube.completed = cube.formula.is_empty();
-            }
-            Err(error) => {
-                cube.formula = vec![format!("UNSOLVED: {error}")];
-                cube.completed = false;
-            }
-        }
+        *cube = solve_cube(cube.clone(), config);
     });
 
     cubes
+}
+
+pub fn solve_cube(mut cube: MosaicCube, config: SolverConfig) -> MosaicCube {
+    let target = cube.target_colors();
+    cube.orientation = OrientationHint {
+        up: target[4],
+        note: format!("Start with {} face up.", target[4].hex()),
+    };
+
+    if target.iter().all(|color| *color == target[0]) {
+        cube.formula = Vec::new();
+        cube.completed = true;
+        return cube;
+    }
+
+    let mut attempts = vec![config.max_depth];
+    for extra_depth in [12usize, 14usize] {
+        if !attempts.contains(&extra_depth) && config.max_depth < extra_depth {
+            attempts.push(extra_depth);
+        }
+    }
+
+    let mut last_error = None;
+    for attempt_depth in attempts {
+        match solve_top_face(
+            target,
+            SolverConfig {
+                max_depth: attempt_depth,
+            },
+        ) {
+            Ok(moves) => {
+                cube.formula = moves.iter().map(|mv| mv.notation().to_owned()).collect();
+                cube.completed = cube.formula.is_empty();
+                return cube;
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    cube.formula = vec![format!(
+        "UNSOLVED: {}",
+        last_error.expect("a failed solve attempt should store an error")
+    )];
+    cube.completed = false;
+    cube
 }
 
 pub fn uniform_face(color: CubeColor) -> [CubeColor; 9] {

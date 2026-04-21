@@ -41,9 +41,16 @@ mod tests {
 
     #[test]
     fn non_white_top_orientation_is_supported() {
-        let solution =
-            solve_top_face(uniform_face(CubeColor::Green), SolverConfig::default()).unwrap();
-        assert!(solution.is_empty());
+        for color in [
+            CubeColor::Green,
+            CubeColor::Red,
+            CubeColor::Blue,
+            CubeColor::Orange,
+            CubeColor::Yellow,
+        ] {
+            let solution = solve_top_face(uniform_face(color), SolverConfig::default()).unwrap();
+            assert!(solution.is_empty(), "{color:?} should support zero-move uniform target");
+        }
     }
 
     #[test]

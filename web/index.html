@@ -13,7 +13,7 @@
           <p class="eyebrow">Rubik Mosaic True-Solver</p>
           <h1>Build the wall, then open a cube in 3D.</h1>
           <p class="lede">
-            Click any cube after preview or solve to jump into the single-cube 3D detail view.
+            Double-click any cube after preview or solve to jump into the single-cube 3D detail view.
           </p>
         </div>
         <div class="hero-stats">
@@ -54,7 +54,7 @@
         </label>
         <label class="field">
           <span>Max depth</span>
-          <input id="maxDepthInput" type="number" min="1" max="12" value="8" />
+          <input id="maxDepthInput" type="number" min="1" max="14" value="12" />
         </label>
         <div class="actions">
           <button id="previewButton" class="secondary">Preview</button>
@@ -75,7 +75,7 @@
             <progress id="solveProgress" max="1" value="0"></progress>
             <span id="progressLabel">0 / 0</span>
           </div>
-          <p class="helper-line">Tip: click a cube on the wall or in the list to open the 3D detail page.</p>
+          <p class="helper-line">Tip: single-click to select a cube, double-click to open the 3D detail page.</p>
         </div>
 
         <aside class="panel sidebar">
@@ -95,6 +95,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=20260421g"></script>
   </body>
 </html>

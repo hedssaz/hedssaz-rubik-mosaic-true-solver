@@ -1,7 +1,10 @@
-import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260421w";
+import { RUBIK_COLORS, describeFormula } from "./cube-sim.js?v=20260422c";
 
-const ASSET_VERSION = "20260421w";
+const ASSET_VERSION = "20260422c";
 const MAIN_STATE_KEY = "cube1:main-state";
+const SELECTED_CUBE_KEY = "cube1:selected-cube";
+const META_KEY = "cube1:meta";
+const CUBE_SEPARATOR_COLOR = "rgba(247, 190, 106, 0.6)";
 
 const state = {
   file: null,
@@ -37,6 +40,7 @@ const worker = new Worker(new URL(`./solver.worker.js?v=${ASSET_VERSION}`, impor
   type: "module",
 });
 
+clearLegacyPersistentData();
 restoreMainState();
 
 worker.addEventListener("message", (event) => {
@@ -308,6 +312,8 @@ function renderMosaic(cubes) {
   for (const cube of cubes) {
     drawCube(cube, cubeWidth, cubeHeight);
   }
+
+  drawCubeSeparators(cubeWidth, cubeHeight);
 }
 
 function shouldLockAspect() {
@@ -368,6 +374,33 @@ function drawCube(cube, cubeWidth, cubeHeight) {
   ctx.strokeRect(offsetX + 1, offsetY + 1, cubeWidth - 2, cubeHeight - 2);
 }
 
+function drawCubeSeparators(cubeWidth, cubeHeight) {
+  ctx.save();
+  ctx.strokeStyle = CUBE_SEPARATOR_COLOR;
+  ctx.lineWidth = 2;
+
+  for (let col = 1; col < state.cols; col += 1) {
+    const x = col * cubeWidth;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  for (let row = 1; row < state.rows; row += 1) {
+    const y = row * cubeHeight;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(247, 190, 106, 0.78)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, canvas.width - 3, canvas.height - 3);
+  ctx.restore();
+}
+
 function renderCubeList(cubes) {
   cubeList.innerHTML = "";
 
@@ -421,9 +454,9 @@ function updateSelection() {
 
 function openCubeDetail(cube) {
   persistMainState();
-  localStorage.setItem("cube1:selected-cube", JSON.stringify(cube));
-  localStorage.setItem(
-    "cube1:meta",
+  sessionStorage.setItem(SELECTED_CUBE_KEY, JSON.stringify(cube));
+  sessionStorage.setItem(
+    META_KEY,
     JSON.stringify({ cols: state.cols, rows: state.rows, total: currentSource().length }),
   );
   window.location.href = `./detail.html?v=${ASSET_VERSION}`;
@@ -473,11 +506,11 @@ function persistMainState() {
     lastEditedDimension: state.lastEditedDimension,
     backgroundColor: state.backgroundColor,
   };
-  localStorage.setItem(MAIN_STATE_KEY, JSON.stringify(payload));
+  sessionStorage.setItem(MAIN_STATE_KEY, JSON.stringify(payload));
 }
 
 function restoreMainState() {
-  const raw = localStorage.getItem(MAIN_STATE_KEY);
+  const raw = sessionStorage.getItem(MAIN_STATE_KEY);
   if (!raw) {
     return;
   }
@@ -532,6 +565,16 @@ function loadImage(file) {
 function handleError(error) {
   statusText.textContent = error instanceof Error ? error.message : String(error);
   solveButton.disabled = false;
+}
+
+function clearLegacyPersistentData() {
+  try {
+    localStorage.removeItem(MAIN_STATE_KEY);
+    localStorage.removeItem(SELECTED_CUBE_KEY);
+    localStorage.removeItem(META_KEY);
+  } catch (error) {
+    console.warn("Failed to clear legacy local cache", error);
+  }
 }
 
 function rgbToOklab(rgb) {

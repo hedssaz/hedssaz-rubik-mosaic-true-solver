@@ -6,18 +6,22 @@ import {
   faceMap,
   formulaStatusLabel,
   manualMoveList,
-} from "./cube-sim.js?v=20260421w";
+} from "./cube-sim.js?v=20260422c";
 
-const mainState = readJson("cube1:main-state", null);
-const persistedCube =
-  readJson("cube1:selected-cube", null, localStorage) ??
-  readJson("cube1:selected-cube", null, sessionStorage);
+const MAIN_STATE_KEY = "cube1:main-state";
+const SELECTED_CUBE_KEY = "cube1:selected-cube";
+const META_KEY = "cube1:meta";
+
+clearLegacyPersistentData();
+
+const mainState = readJson(MAIN_STATE_KEY, null, sessionStorage);
+const persistedCube = readJson(SELECTED_CUBE_KEY, null, sessionStorage);
 const cube =
   persistedCube ??
   mainState?.solvedCubes?.find((item) => item.id === mainState?.selectedCubeId) ??
   mainState?.cubes?.find((item) => item.id === mainState?.selectedCubeId) ??
   null;
-const meta = readJson("cube1:meta", {}, localStorage) ?? readJson("cube1:meta", {}, sessionStorage) ?? {};
+const meta = readJson(META_KEY, {}, sessionStorage) ?? {};
 
 const title = document.getElementById("detailTitle");
 const detailStatus = document.getElementById("detailStatus");
@@ -38,6 +42,7 @@ const dragHint = document.getElementById("dragHint");
 const viewState = {
   pitch: -26,
   yaw: -38,
+  zoom: 1,
   dragging: false,
   pointerId: null,
   lastX: 0,
@@ -49,7 +54,7 @@ backToWall.addEventListener("click", () => {
     window.history.back();
     return;
   }
-  window.location.href = "./index.html?v=20260421w";
+  window.location.href = "./index.html?v=20260422c";
 });
 
 if (!cube) {
@@ -207,6 +212,19 @@ function startDetail() {
     cubeCanvas.addEventListener("pointerup", finishDrag);
     cubeCanvas.addEventListener("pointercancel", finishDrag);
     cubeCanvas.addEventListener("lostpointercapture", finishDrag);
+    cubeCanvas.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+        const zoomDelta = event.deltaY > 0 ? -0.08 : 0.08;
+        viewState.zoom = clamp(viewState.zoom + zoomDelta, 0.7, 1.9);
+        if (dragHint) {
+          dragHint.textContent = `Drag to rotate. Wheel to zoom (${Math.round(viewState.zoom * 100)}%).`;
+        }
+        renderState();
+      },
+      { passive: false },
+    );
   }
 }
 
@@ -218,7 +236,7 @@ function renderCubeCanvas(faces, pitch, yaw) {
   cubeContext.fillStyle = "#141313";
   cubeContext.fillRect(0, 0, width, height);
 
-  const geometry = createProjectedCube(width, height, pitch, yaw);
+  const geometry = createProjectedCube(width, height, pitch, yaw, viewState.zoom);
   const displayFaces = {
     F: orientFace(faces.U),
     B: orientFace(faces.D, { reverseRows: true, reverseCols: true }),
@@ -387,12 +405,12 @@ function drawQuad(points, fillStyle, strokeStyle, lineWidth) {
   cubeContext.stroke();
 }
 
-function createProjectedCube(width, height, pitch, yaw) {
+function createProjectedCube(width, height, pitch, yaw, zoom = 1) {
   const pitchRad = (pitch * Math.PI) / 180;
   const yawRad = (yaw * Math.PI) / 180;
   const centerX = width * 0.5;
   const centerY = height * 0.58;
-  const scale = width * 0.34;
+  const scale = width * 0.34 * zoom;
   const cameraDistance = 6.2;
   const halfSize = 1.04;
   const halfDepth = 0.82;
@@ -532,7 +550,17 @@ function orientFace(colors, options = {}) {
     .flat();
 }
 
-function readJson(key, fallback, storage = localStorage) {
+function clearLegacyPersistentData() {
+  try {
+    localStorage.removeItem(MAIN_STATE_KEY);
+    localStorage.removeItem(SELECTED_CUBE_KEY);
+    localStorage.removeItem(META_KEY);
+  } catch (error) {
+    console.warn("Failed to clear legacy local cache", error);
+  }
+}
+
+function readJson(key, fallback, storage = sessionStorage) {
   const raw = storage.getItem(key);
   if (!raw) {
     return fallback;
